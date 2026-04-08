@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: meetings_postgres
+    environment:
+      POSTGRES_DB: meetingsummaries
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./MeetingSummaries.Api
+      dockerfile: Dockerfile
+    container_name: meetings_api
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=meetingsummaries;Username=postgres;Password=postgres
+      - SelfBaseUrl=http://localhost:8080/
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
