@@ -17,7 +17,18 @@ builder.Services.AddControllers()
     });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(o =>
+{
+    o.SwaggerDoc("v1", new()
+    {
+        Title = "Meeting Summaries API",
+        Version = "v1",
+        Description = "API do zarządzania podsumowaniami spotkań zespołowych (Daily, Refinement, Retro, Sprint Review, Sprint Planning)."
+    });
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    o.IncludeXmlComments(xmlPath);
+});
 
 // Services
 builder.Services.AddScoped<MeetingService>();
