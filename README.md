@@ -33,7 +33,7 @@ Built with .NET 8, Blazor Server, PostgreSQL, and Docker Compose.
 Requirements: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
 ```bash
-git clone https://github.com/<your-username>/meeting-summaries.git
+git clone https://github.com/0Swat/meeting-summaries.git
 cd meeting-summaries
 docker compose up
 ```
