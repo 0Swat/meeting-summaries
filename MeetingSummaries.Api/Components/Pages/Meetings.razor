@@ -1,0 +1,451 @@
+@page "/meetings"
+@rendermode InteractiveServer
+@using MeetingSummaries.Api.Dto.Responses
+@using MeetingSummaries.Api.Models
+@using MeetingSummaries.Api.Components.Shared
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<PageTitle>Podsumowania Spotkań</PageTitle>
+
+<h1>Podsumowania Spotkań</h1>
+
+<div class="row g-4 mb-4">
+    <div class="col-auto">
+        <MeetingCalendar @ref="_calendar"
+                         SelectedDate="_selectedDate"
+                         SelectedDateChanged="OnDateSelected" />
+    </div>
+
+    @if (_selectedDate is not null)
+    {
+        <div class="col">
+            <h5 class="mb-3">@_selectedDate.Value.ToString("dd MMMM yyyy", _pl)</h5>
+
+            @if (_summaries.Any())
+            {
+                @foreach (var summary in _summaries)
+                {
+                    <div class="card mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <strong>@summary.Type</strong>
+                            <button class="btn btn-sm btn-outline-danger"
+                                    @onclick="() => DeleteSummary(summary)">
+                                Usuń spotkanie
+                            </button>
+                        </div>
+                        <ul class="list-group list-group-flush">
+                            @for (int i = 0; i < summary.Points.Count; i++)
+                            {
+                                var p   = summary.Points[i];
+                                var s   = summary;
+                                var pos = i;
+
+                                <li class="drop-zone @(IsDropZoneActive(s.Id, pos) ? "drop-zone-active" : "")"
+                                    @ondragover:preventDefault
+                                    @ondragover="() => _dropZone = (s.Id, pos)"
+                                    @ondrop="() => OnDropAtIndex(s, pos)"></li>
+
+                                <li class="list-group-item point-item d-flex align-items-start gap-2
+                                           @(_draggingId == p.Id ? "point-dragging" : "")"
+                                    draggable="@(_editingId == p.Id ? "false" : "true")"
+                                    @ondragstart="() => OnDragStart(p.Id)"
+                                    @ondragend="OnDragEnd"
+                                    @ondragover:preventDefault>
+
+                                    @if (_editingId != p.Id)
+                                    {
+                                        <span class="drag-handle" title="Przeciągnij aby zmienić kolejność">⠿</span>
+                                    }
+
+                                    @if (_editingId == p.Id)
+                                    {
+                                        <textarea class="form-control form-control-sm flex-grow-1 point-textarea"
+                                                  @bind="_editContent" @bind:event="oninput"
+                                                  @onkeydown="@(e => OnEditKeyDown(e, p.Id))"
+                                                  rows="3"></textarea>
+                                        <div class="d-flex flex-column gap-1">
+                                            <button class="btn btn-sm btn-success" @onclick="() => SaveEdit(p.Id)">Zapisz</button>
+                                            <button class="btn btn-sm btn-secondary" @onclick="CancelEdit">Anuluj</button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <pre class="flex-grow-1 point-content mb-0">@p.Content</pre>
+                                        <div class="d-flex flex-column gap-1">
+                                            <button class="btn btn-sm btn-outline-secondary icon-btn"
+                                                    title="Edytuj"
+                                                    @onclick="() => StartEdit(p)">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger icon-btn"
+                                                    title="Usuń"
+                                                    @onclick="() => DeletePoint(s, p.Id)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    }
+                                </li>
+                            }
+
+                            @{
+                                var lastSummary = summary;
+                                var lastPos     = summary.Points.Count;
+                            }
+                            <li class="drop-zone @(IsDropZoneActive(lastSummary.Id, lastPos) ? "drop-zone-active" : "")"
+                                @ondragover:preventDefault
+                                @ondragover="() => _dropZone = (lastSummary.Id, lastPos)"
+                                @ondrop="() => OnDropAtIndex(lastSummary, lastPos)"></li>
+                        </ul>
+                        <div class="card-footer d-flex gap-2 align-items-start">
+                            <textarea class="form-control point-textarea" placeholder="Nowy punkt… (Ctrl+Enter = dodaj)"
+                                      @bind="_newPointContent[summary.Id]" @bind:event="oninput"
+                                      @onkeydown="@(e => OnNewPointKeyDown(e, summary))"
+                                      rows="2"></textarea>
+                            <button class="btn btn-primary" @onclick="() => AddPoint(summary)"
+                                    disabled="@(!_newPointContent.TryGetValue(summary.Id, out var c) || string.IsNullOrWhiteSpace(c))">
+                                Dodaj
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <p class="text-muted">Brak spotkań w tym dniu.</p>
+            }
+
+            <div class="card border-dashed">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <span class="fw-semibold text-nowrap">Dodaj spotkanie:</span>
+                    <select class="form-select w-auto" @bind="_newMeetingType">
+                        <option value="">-- wybierz typ --</option>
+                        @foreach (var t in AvailableTypes)
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </select>
+                    <button class="btn btn-success" @onclick="CreateMeeting"
+                            disabled="@(string.IsNullOrEmpty(_newMeetingType))">
+                        + Utwórz
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger mt-3">@_error</div>
+}
+
+<style>
+    .border-dashed { border-style: dashed !important; }
+
+    .point-content {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: inherit;
+        font-size: inherit;
+        background: transparent;
+        padding: 0;
+    }
+
+    .point-textarea {
+        font-family: inherit;
+        resize: vertical;
+        white-space: pre-wrap;
+    }
+
+    .point-item {
+        transition: opacity 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+        cursor: default;
+    }
+
+    .drag-handle {
+        cursor: grab;
+        color: #adb5bd;
+        font-size: 1.1rem;
+        line-height: 1.5;
+        padding: 2px 2px 0;
+        user-select: none;
+        flex-shrink: 0;
+    }
+
+    .drag-handle:hover {
+        color: #495057;
+    }
+
+    .icon-btn {
+        width: 30px;
+        height: 28px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .point-dragging {
+        opacity: 0.35;
+        background-color: #f8f9fa !important;
+    }
+
+    .drop-zone {
+        height: 6px;
+        padding: 0 !important;
+        border: none !important;
+        background: transparent;
+        transition: height 0.12s ease, background 0.12s ease;
+        list-style: none;
+    }
+
+    .drop-zone-active {
+        height: 18px;
+        background: linear-gradient(90deg, #0d6efd 0%, #6ea8fe 100%);
+        border-radius: 4px;
+    }
+</style>
+
+@code {
+    private MeetingCalendar? _calendar;
+    private DateOnly? _selectedDate;
+    private List<MeetingSummaryDto> _summaries = new();
+    private string _newMeetingType = string.Empty;
+
+    private readonly Dictionary<Guid, string> _newPointContent = new();
+    private Guid? _editingId;
+    private string _editContent = string.Empty;
+    private string? _error;
+
+    // drag state
+    private Guid? _draggingId;
+    private (Guid SummaryId, int Index)? _dropZone;
+
+    private readonly System.Globalization.CultureInfo _pl =
+        System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
+
+    private IEnumerable<string> AvailableTypes =>
+        Enum.GetNames<MeetingType>()
+            .Where(t => _summaries.All(s => s.Type.ToString() != t));
+
+    // ── drag & drop ───────────────────────────────────────────────────────────
+
+    private bool IsDropZoneActive(Guid summaryId, int index) =>
+        _dropZone is { } dz && dz.SummaryId == summaryId && dz.Index == index;
+
+    private void OnDragStart(Guid pointId)
+    {
+        _draggingId = pointId;
+        _dropZone   = null;
+    }
+
+    private void OnDragEnd()
+    {
+        _draggingId = null;
+        _dropZone   = null;
+    }
+
+    private async Task OnDropAtIndex(MeetingSummaryDto summary, int targetDropZone)
+    {
+        if (_draggingId is null) return;
+
+        var points  = summary.Points.ToList();
+        var dragged = points.FirstOrDefault(p => p.Id == _draggingId);
+        if (dragged is null) return;
+
+        var fromIndex = points.IndexOf(dragged);
+        points.Remove(dragged);
+
+        // po usunięciu elementu indeks strefy przesuwa się o 1 jeśli był przed nią
+        var insertAt = fromIndex < targetDropZone ? targetDropZone - 1 : targetDropZone;
+        insertAt = Math.Clamp(insertAt, 0, points.Count);
+        points.Insert(insertAt, dragged);
+
+        _draggingId = null;
+        _dropZone   = null;
+
+        var items = points.Select((p, i) => new { PointId = p.Id, NewIndex = i }).ToList();
+
+        _error = null;
+        try
+        {
+            var response = await Http.PatchAsJsonAsync(
+                "api/meetings/points/reorder", new { Items = items });
+            response.EnsureSuccessStatusCode();
+            await LoadSummaries();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    // ── data ──────────────────────────────────────────────────────────────────
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var stored = await JS.InvokeAsync<string?>("storage.get", "selectedDate");
+        var date = DateOnly.TryParse(stored, out var d) ? d : DateOnly.FromDateTime(DateTime.Today);
+
+        _selectedDate = date;
+        await LoadSummaries();
+        StateHasChanged();
+    }
+
+    private async Task OnDateSelected(DateOnly date)
+    {
+        _selectedDate = date;
+        await JS.InvokeVoidAsync("storage.set", "selectedDate", date.ToString("yyyy-MM-dd"));
+        _error = null;
+        _newMeetingType = string.Empty;
+        _newPointContent.Clear();
+        CancelEdit();
+        await LoadSummaries();
+    }
+
+    private async Task LoadSummaries()
+    {
+        if (_selectedDate is null) return;
+        _summaries = new();
+        StateHasChanged();
+        try
+        {
+            _summaries = await Http.GetFromJsonAsync<List<MeetingSummaryDto>>(
+                $"api/meetings/by-date/{_selectedDate:yyyy-MM-dd}") ?? new();
+            foreach (var s in _summaries)
+                _newPointContent.TryAdd(s.Id, string.Empty);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task RefreshCalendar()
+    {
+        if (_calendar is not null)
+            await _calendar.RefreshDots();
+    }
+
+    private async Task CreateMeeting()
+    {
+        _error = null;
+        if (_selectedDate is null || string.IsNullOrEmpty(_newMeetingType)) return;
+        if (!Enum.TryParse<MeetingType>(_newMeetingType, out var type)) return;
+
+        try
+        {
+            var response = await Http.PostAsync(
+                $"api/meetings/{type}/{_selectedDate:yyyy-MM-dd}", null);
+            response.EnsureSuccessStatusCode();
+            _newMeetingType = string.Empty;
+            await LoadSummaries();
+            await RefreshCalendar();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task DeleteSummary(MeetingSummaryDto summary)
+    {
+        _error = null;
+        try
+        {
+            var response = await Http.DeleteAsync(
+                $"api/meetings/{summary.Type}/{_selectedDate:yyyy-MM-dd}");
+            response.EnsureSuccessStatusCode();
+            _newPointContent.Remove(summary.Id);
+            await LoadSummaries();
+            await RefreshCalendar();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddPoint(MeetingSummaryDto summary)
+    {
+        _error = null;
+        if (!_newPointContent.TryGetValue(summary.Id, out var content)
+            || string.IsNullOrWhiteSpace(content)) return;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/meetings/{summary.Type}/{_selectedDate:yyyy-MM-dd}/points",
+                new { Content = content.Trim() });
+            response.EnsureSuccessStatusCode();
+            _newPointContent[summary.Id] = string.Empty;
+            await LoadSummaries();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task OnNewPointKeyDown(KeyboardEventArgs e, MeetingSummaryDto summary)
+    {
+        if (e.Key == "Enter" && e.CtrlKey) await AddPoint(summary);
+    }
+
+    private void StartEdit(MeetingPointDto point)
+    {
+        _editingId = point.Id;
+        _editContent = point.Content;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+        _editContent = string.Empty;
+    }
+
+    private async Task SaveEdit(Guid pointId)
+    {
+        _error = null;
+        if (string.IsNullOrWhiteSpace(_editContent)) return;
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync(
+                $"api/meetings/points/{pointId}",
+                new { Content = _editContent.Trim() });
+            response.EnsureSuccessStatusCode();
+            _editingId = null;
+            await LoadSummaries();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task OnEditKeyDown(KeyboardEventArgs e, Guid pointId)
+    {
+        if (e.Key == "Enter" && e.CtrlKey) await SaveEdit(pointId);
+        else if (e.Key == "Escape") CancelEdit();
+    }
+
+    private async Task DeletePoint(MeetingSummaryDto summary, Guid pointId)
+    {
+        _error = null;
+        try
+        {
+            var response = await Http.DeleteAsync($"api/meetings/points/{pointId}");
+            response.EnsureSuccessStatusCode();
+            await LoadSummaries();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}
