@@ -1,51 +1,8 @@
 @inherits LayoutComponentBase
-@inject IJSRuntime JS
+@using MeetingSummaries.Api.Components.Shared
 
-<button class="theme-toggle btn btn-outline-secondary" @onclick="ToggleTheme" title="@(_isDark ? "Tryb jasny" : "Tryb ciemny")">
-    <i class="bi @(_isDark ? "bi-sun" : "bi-moon-stars")"></i>
-</button>
+<ThemeToggle />
 
 <div class="container py-4">
     @Body
 </div>
-
-<style>
-    .theme-toggle {
-        position: fixed;
-        top: 1rem;
-        right: 1rem;
-        z-index: 1000;
-        width: 40px;
-        height: 40px;
-        padding: 0;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.1rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,.15);
-        transition: transform .15s ease;
-    }
-
-    .theme-toggle:hover {
-        transform: rotate(20deg);
-    }
-</style>
-
-@code {
-    private bool _isDark;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender) return;
-        var current = await JS.InvokeAsync<string>("theme.get");
-        _isDark = current == "dark";
-        StateHasChanged();
-    }
-
-    private async Task ToggleTheme()
-    {
-        var next = await JS.InvokeAsync<string>("theme.toggle");
-        _isDark = next == "dark";
-    }
-}
