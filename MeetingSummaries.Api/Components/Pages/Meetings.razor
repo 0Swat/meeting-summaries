@@ -3,6 +3,7 @@
 @using MeetingSummaries.Api.Dto.Responses
 @using MeetingSummaries.Api.Models
 @using MeetingSummaries.Api.Components.Shared
+@using System.Text.RegularExpressions
 @inject HttpClient Http
 @inject IJSRuntime JS
 
@@ -71,7 +72,7 @@
                                     }
                                     else
                                     {
-                                        <pre class="flex-grow-1 point-content mb-0">@p.Content</pre>
+                                        <PointContent Text="@p.Content" />
                                         <div class="d-flex flex-column gap-1">
                                             <button class="btn btn-sm btn-outline-secondary icon-btn"
                                                     title="Edytuj"
@@ -188,6 +189,10 @@
 
     [data-bs-theme="dark"] .point-content {
         color: #dee2e6;
+    }
+
+    [data-bs-theme="dark"] .point-content a {
+        color: #6ea8fe;
     }
 
     [data-bs-theme="dark"] .drag-handle {

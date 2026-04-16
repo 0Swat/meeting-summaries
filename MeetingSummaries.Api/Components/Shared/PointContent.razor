@@ -1,0 +1,41 @@
+@using System.Text.RegularExpressions
+
+<pre class="flex-grow-1 point-content mb-0">@foreach (var segment in _segments)
+    {
+        if (segment.IsUrl)
+        {
+            <a href="@segment.Value" target="_blank" rel="noopener noreferrer">@segment.Value</a>
+        }
+        else
+        {
+            @segment.Value
+        }
+    }</pre>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+
+    private static readonly Regex UrlRegex = new(
+        @"https?://[^\s<>""')\]]+",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private record Segment(string Value, bool IsUrl);
+
+    private List<Segment> _segments = new();
+
+    protected override void OnParametersSet()
+    {
+        _segments = new();
+        var parts = UrlRegex.Split(Text);
+        var matches = UrlRegex.Matches(Text);
+
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (parts[i].Length > 0)
+                _segments.Add(new(parts[i], false));
+
+            if (i < matches.Count)
+                _segments.Add(new(matches[i].Value, true));
+        }
+    }
+}
