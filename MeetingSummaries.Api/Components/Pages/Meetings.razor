@@ -71,6 +71,11 @@
                                         <div class="d-flex flex-column gap-1">
                                             <button class="btn btn-sm btn-success" @onclick="() => SaveEdit(p.Id)">Zapisz</button>
                                             <button class="btn btn-sm btn-secondary" @onclick="CancelEdit">Anuluj</button>
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    @ondblclick:stopPropagation="true"
+                                                    @onclick="() => DeletePoint(s, p.Id)">
+                                                Usuń
+                                            </button>
                                         </div>
                                     }
                                     else
@@ -83,12 +88,6 @@
                                                     @ondblclick:stopPropagation="true"
                                                     @onclick="() => StartEdit(p)">
                                                 <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-danger icon-btn"
-                                                    title="Usuń"
-                                                    @ondblclick:stopPropagation="true"
-                                                    @onclick="() => DeletePoint(s, p.Id)">
-                                                <i class="bi bi-trash"></i>
                                             </button>
                                         </div>
                                     }
