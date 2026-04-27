@@ -1,10 +1,14 @@
 @using System.Text.RegularExpressions
 
-<pre class="flex-grow-1 point-content mb-0">@foreach (var segment in _segments)
+<pre class="flex-grow-1 point-content mb-0"
+     @ondblclick="OnDoubleClick">@foreach (var segment in _segments)
     {
         if (segment.IsUrl)
         {
-            <a href="@segment.Value" target="_blank" rel="noopener noreferrer">@segment.Value</a>
+            <a href="@segment.Value"
+               target="_blank"
+               rel="noopener noreferrer"
+               @ondblclick:stopPropagation="true">@segment.Value</a>
         }
         else
         {
@@ -14,6 +18,7 @@
 
 @code {
     [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnDoubleClick { get; set; }
 
     private static readonly Regex UrlRegex = new(
         @"https?://[^\s<>""')\]]+",

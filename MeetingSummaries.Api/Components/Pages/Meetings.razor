@@ -50,13 +50,16 @@
                                 <li class="list-group-item point-item d-flex align-items-start gap-2
                                            @(_draggingId == p.Id ? "point-dragging" : "")"
                                     draggable="@(_editingId == p.Id ? "false" : "true")"
+                                    @ondblclick="() => OnPointDoubleClick(p)"
                                     @ondragstart="() => OnDragStart(p.Id)"
                                     @ondragend="OnDragEnd"
                                     @ondragover:preventDefault>
 
                                     @if (_editingId != p.Id)
                                     {
-                                        <span class="drag-handle" title="Przeciągnij aby zmienić kolejność">⠿</span>
+                                        <span class="drag-handle"
+                                              title="Przeciągnij aby zmienić kolejność"
+                                              @ondblclick:stopPropagation="true">⠿</span>
                                     }
 
                                     @if (_editingId == p.Id)
@@ -72,15 +75,18 @@
                                     }
                                     else
                                     {
-                                        <PointContent Text="@p.Content" />
+                                        <PointContent Text="@p.Content"
+                                                      OnDoubleClick="() => StartEdit(p)" />
                                         <div class="d-flex flex-column gap-1">
                                             <button class="btn btn-sm btn-outline-secondary icon-btn"
                                                     title="Edytuj"
+                                                    @ondblclick:stopPropagation="true"
                                                     @onclick="() => StartEdit(p)">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <button class="btn btn-sm btn-outline-danger icon-btn"
                                                     title="Usuń"
+                                                    @ondblclick:stopPropagation="true"
                                                     @onclick="() => DeletePoint(s, p.Id)">
                                                 <i class="bi bi-trash"></i>
                                             </button>
@@ -417,6 +423,12 @@
     {
         _editingId = point.Id;
         _editContent = point.Content;
+    }
+
+    private void OnPointDoubleClick(MeetingPointDto point)
+    {
+        if (_editingId == point.Id) return;
+        StartEdit(point);
     }
 
     private void CancelEdit()
