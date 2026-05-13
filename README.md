@@ -11,12 +11,14 @@ Built with .NET 8, Blazor Server, PostgreSQL, and Docker Compose.
 
 ## Features
 
+- JWT authentication — register your own account, each user sees only their data
 - Monthly calendar with color-coded dots showing which meeting types occurred on each day
 - One page per day — all meeting types side by side
-- Rich text points: multi-line, tab-indented, preserved formatting
+- Rich text points: multi-line, tab-indented, preserved formatting, clickable URLs
 - Drag-and-drop reordering of points with drop-zone indicators
 - Inline editing, keyboard shortcuts (Ctrl+Enter to save, Escape to cancel)
-- Selected date persisted in `localStorage`
+- Dark / light mode toggle, persisted in `localStorage`
+- Settings panel: change password, delete account
 
 ## Meeting types
 
@@ -35,12 +37,26 @@ Requirements: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 ```bash
 git clone https://github.com/0Swat/meeting-summaries.git
 cd meeting-summaries
+```
+
+**Before first run** — set a secret JWT key in `MeetingSummaries.Api/appsettings.json`:
+
+```json
+"Jwt": {
+  "Key": "your-secret-key-min-32-characters-long",
+  ...
+}
+```
+
+Then start the app:
+
+```bash
 docker compose up
 ```
 
 Open **http://localhost:8080/meetings**
 
-The database schema is applied automatically on first start.
+The database schema is applied automatically. On first run the app has no accounts — go to `/register` to create yours.
 
 ## Stack
 

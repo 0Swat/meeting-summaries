@@ -22,3 +22,6 @@ Thumbs.db
 # Claude Code
 .claude/
 CLAUDE.md
+start.bat
+backup.sql
+backup.csv
