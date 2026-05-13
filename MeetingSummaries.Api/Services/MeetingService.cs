@@ -11,20 +11,20 @@ public class MeetingService(AppDbContext db)
     public IEnumerable<string> GetMeetingTypes() =>
         Enum.GetNames<MeetingType>();
 
-    public async Task<List<DateOnly>> GetDatesForTypeAsync(MeetingType type) =>
+    public async Task<List<DateOnly>> GetDatesForTypeAsync(MeetingType type, Guid userId) =>
         await db.MeetingSummaries
-            .Where(s => s.Type == type)
+            .Where(s => s.Type == type && s.UserId == userId)
             .OrderByDescending(s => s.Date)
             .Select(s => s.Date)
             .ToListAsync();
 
-    public async Task<List<DayDotsDto>> GetMonthDotsAsync(int year, int month)
+    public async Task<List<DayDotsDto>> GetMonthDotsAsync(int year, int month, Guid userId)
     {
         var from = new DateOnly(year, month, 1);
         var to = from.AddMonths(1);
 
         var rows = await db.MeetingSummaries
-            .Where(s => s.Date >= from && s.Date < to)
+            .Where(s => s.Date >= from && s.Date < to && s.UserId == userId)
             .Select(s => new { s.Date, s.Type })
             .ToListAsync();
 
@@ -35,11 +35,11 @@ public class MeetingService(AppDbContext db)
             .ToList();
     }
 
-    public async Task<List<MeetingSummaryDto>> GetSummariesForDateAsync(DateOnly date)
+    public async Task<List<MeetingSummaryDto>> GetSummariesForDateAsync(DateOnly date, Guid userId)
     {
         var summaries = await db.MeetingSummaries
             .Include(s => s.Points.OrderBy(p => p.OrderIndex))
-            .Where(s => s.Date == date)
+            .Where(s => s.Date == date && s.UserId == userId)
             .ToListAsync();
 
         return summaries
@@ -48,20 +48,20 @@ public class MeetingService(AppDbContext db)
             .ToList();
     }
 
-    public async Task<MeetingSummaryDto?> GetSummaryAsync(MeetingType type, DateOnly date)
+    public async Task<MeetingSummaryDto?> GetSummaryAsync(MeetingType type, DateOnly date, Guid userId)
     {
         var summary = await db.MeetingSummaries
             .Include(s => s.Points.OrderBy(p => p.OrderIndex))
-            .FirstOrDefaultAsync(s => s.Type == type && s.Date == date);
+            .FirstOrDefaultAsync(s => s.Type == type && s.Date == date && s.UserId == userId);
 
         return summary is null ? null : ToDto(summary);
     }
 
-    public async Task<MeetingSummaryDto> EnsureSummaryAsync(MeetingType type, DateOnly date)
+    public async Task<MeetingSummaryDto> EnsureSummaryAsync(MeetingType type, DateOnly date, Guid userId)
     {
         var existing = await db.MeetingSummaries
             .Include(s => s.Points.OrderBy(p => p.OrderIndex))
-            .FirstOrDefaultAsync(s => s.Type == type && s.Date == date);
+            .FirstOrDefaultAsync(s => s.Type == type && s.Date == date && s.UserId == userId);
 
         if (existing is not null)
             return ToDto(existing);
@@ -70,23 +70,32 @@ public class MeetingService(AppDbContext db)
         {
             Id = Guid.NewGuid(),
             Type = type,
-            Date = date
+            Date = date,
+            UserId = userId
         };
         db.MeetingSummaries.Add(summary);
         await db.SaveChangesAsync();
         return ToDto(summary);
     }
 
-    public async Task<MeetingPointDto> AddPointAsync(MeetingType type, DateOnly date, AddPointRequest request)
+    public async Task DeleteSummaryAsync(MeetingType type, DateOnly date, Guid userId)
+    {
+        var summary = await db.MeetingSummaries
+            .FirstOrDefaultAsync(s => s.Type == type && s.Date == date && s.UserId == userId)
+            ?? throw new KeyNotFoundException("Summary not found.");
+
+        db.MeetingSummaries.Remove(summary);
+        await db.SaveChangesAsync();
+    }
+
+    public async Task<MeetingPointDto> AddPointAsync(MeetingType type, DateOnly date, Guid userId, AddPointRequest request)
     {
         var summary = await db.MeetingSummaries
             .Include(s => s.Points)
-            .FirstOrDefaultAsync(s => s.Type == type && s.Date == date)
+            .FirstOrDefaultAsync(s => s.Type == type && s.Date == date && s.UserId == userId)
             ?? throw new KeyNotFoundException("Summary not found.");
 
-        var maxIndex = summary.Points.Any()
-            ? summary.Points.Max(p => p.OrderIndex)
-            : -1;
+        var maxIndex = summary.Points.Any() ? summary.Points.Max(p => p.OrderIndex) : -1;
 
         var point = new MeetingPoint
         {
@@ -100,9 +109,11 @@ public class MeetingService(AppDbContext db)
         return new MeetingPointDto(point.Id, point.Content, point.OrderIndex);
     }
 
-    public async Task<MeetingPointDto> UpdatePointAsync(Guid pointId, UpdatePointRequest request)
+    public async Task<MeetingPointDto> UpdatePointAsync(Guid pointId, Guid userId, UpdatePointRequest request)
     {
-        var point = await db.MeetingPoints.FindAsync(pointId)
+        var point = await db.MeetingPoints
+            .Include(p => p.Summary)
+            .FirstOrDefaultAsync(p => p.Id == pointId && p.Summary.UserId == userId)
             ?? throw new KeyNotFoundException("Point not found.");
 
         point.Content = request.Content;
@@ -110,30 +121,23 @@ public class MeetingService(AppDbContext db)
         return new MeetingPointDto(point.Id, point.Content, point.OrderIndex);
     }
 
-    public async Task DeletePointAsync(Guid pointId)
+    public async Task DeletePointAsync(Guid pointId, Guid userId)
     {
-        var point = await db.MeetingPoints.FindAsync(pointId)
+        var point = await db.MeetingPoints
+            .Include(p => p.Summary)
+            .FirstOrDefaultAsync(p => p.Id == pointId && p.Summary.UserId == userId)
             ?? throw new KeyNotFoundException("Point not found.");
 
         db.MeetingPoints.Remove(point);
         await db.SaveChangesAsync();
     }
 
-    public async Task DeleteSummaryAsync(MeetingType type, DateOnly date)
-    {
-        var summary = await db.MeetingSummaries
-            .FirstOrDefaultAsync(s => s.Type == type && s.Date == date)
-            ?? throw new KeyNotFoundException("Summary not found.");
-
-        db.MeetingSummaries.Remove(summary);
-        await db.SaveChangesAsync();
-    }
-
-    public async Task ReorderPointsAsync(ReorderPointsRequest request)
+    public async Task ReorderPointsAsync(ReorderPointsRequest request, Guid userId)
     {
         var ids = request.Items.Select(i => i.PointId).ToList();
         var points = await db.MeetingPoints
-            .Where(p => ids.Contains(p.Id))
+            .Include(p => p.Summary)
+            .Where(p => ids.Contains(p.Id) && p.Summary.UserId == userId)
             .ToListAsync();
 
         await using var transaction = await db.Database.BeginTransactionAsync();
@@ -150,13 +154,8 @@ public class MeetingService(AppDbContext db)
     }
 
     private static MeetingSummaryDto ToDto(MeetingSummary s) =>
-        new(
-            s.Id,
-            s.Type,
-            s.Date,
-            s.Points
-                .OrderBy(p => p.OrderIndex)
-                .Select(p => new MeetingPointDto(p.Id, p.Content, p.OrderIndex))
-                .ToList()
-        );
+        new(s.Id, s.Type, s.Date,
+            s.Points.OrderBy(p => p.OrderIndex)
+                    .Select(p => new MeetingPointDto(p.Id, p.Content, p.OrderIndex))
+                    .ToList());
 }
