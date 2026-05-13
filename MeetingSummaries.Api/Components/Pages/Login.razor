@@ -1,0 +1,124 @@
+@page "/login"
+@layout AuthLayout
+@rendermode InteractiveServer
+@using MeetingSummaries.Api.Components.Layout
+@using System.Net
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Logowanie</PageTitle>
+
+<div class="login-wrap">
+    <div class="card login-card shadow">
+        <div class="card-body p-4">
+            <h4 class="mb-4 text-center fw-semibold">Podsumowania Spotkań</h4>
+
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger py-2">@_error</div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label">Login</label>
+                <input class="form-control" @bind="_username" @bind:event="oninput"
+                       @onkeydown="OnKeyDown" autocomplete="username" />
+            </div>
+            <div class="mb-4">
+                <label class="form-label">Hasło</label>
+                <input type="password" class="form-control" @bind="_password" @bind:event="oninput"
+                       @onkeydown="OnKeyDown" autocomplete="current-password" />
+            </div>
+            <button class="btn btn-primary w-100 mb-3" @onclick="DoLogin" disabled="@_loading">
+                @if (_loading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                }
+                Zaloguj
+            </button>
+            <div class="text-center">
+                <a href="/register" class="text-secondary small">Nie masz konta? Zarejestruj się</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .login-wrap {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 80vh;
+    }
+
+    .login-card {
+        width: 100%;
+        max-width: 380px;
+    }
+</style>
+
+@code {
+    private string _username = string.Empty;
+    private string _password = string.Empty;
+    private string? _error;
+    private bool _loading;
+
+    private record LoginResponse(string Token, DateTime ExpiresAt);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var token = await JS.InvokeAsync<string?>("storage.get", "jwt");
+        if (!string.IsNullOrEmpty(token) && !IsTokenExpired(token))
+            Nav.NavigateTo("/meetings");
+    }
+
+    private async Task DoLogin()
+    {
+        _error = null;
+        _loading = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/auth/login",
+                new { Username = _username, Password = _password });
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                _error = "Nieprawidłowa nazwa użytkownika lub hasło.";
+                return;
+            }
+            response.EnsureSuccessStatusCode();
+
+            var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            await JS.InvokeVoidAsync("storage.set", "jwt", result!.Token);
+            Nav.NavigateTo("/meetings");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await DoLogin();
+    }
+
+    private static bool IsTokenExpired(string token)
+    {
+        try
+        {
+            var payload = token.Split('.')[1];
+            var padded = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var exp = doc.RootElement.GetProperty("exp").GetInt64();
+            return DateTimeOffset.UtcNow.ToUnixTimeSeconds() >= exp;
+        }
+        catch { return true; }
+    }
+}

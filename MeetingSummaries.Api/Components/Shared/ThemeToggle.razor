@@ -1,18 +1,32 @@
 @rendermode InteractiveServer
 @inject IJSRuntime JS
+@inject NavigationManager Nav
 
-<button class="theme-toggle btn btn-outline-secondary"
-        @onclick="Toggle"
-        title="@(_isDark ? "Tryb jasny" : "Tryb ciemny")">
-    <i class="bi @(_isDark ? "bi-sun" : "bi-moon-stars")"></i>
-</button>
+<div class="nav-buttons">
+    @if (ShowLogout)
+    {
+        <button class="btn btn-outline-secondary icon-nav-btn"
+                @onclick="Logout" title="Wyloguj">
+            <i class="bi bi-box-arrow-right"></i>
+        </button>
+    }
+    <button class="btn btn-outline-secondary icon-nav-btn"
+            @onclick="Toggle" title="@(_isDark ? "Tryb jasny" : "Tryb ciemny")">
+        <i class="bi @(_isDark ? "bi-sun" : "bi-moon-stars")"></i>
+    </button>
+</div>
 
 <style>
-    .theme-toggle {
+    .nav-buttons {
         position: fixed;
         top: 1rem;
         right: 1rem;
         z-index: 1000;
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .icon-nav-btn {
         width: 40px;
         height: 40px;
         padding: 0;
@@ -25,12 +39,13 @@
         transition: transform .15s ease;
     }
 
-    .theme-toggle:hover {
+    .icon-nav-btn:hover {
         transform: rotate(20deg);
     }
 </style>
 
 @code {
+    [Parameter] public bool ShowLogout { get; set; } = true;
     private bool _isDark;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -45,5 +60,11 @@
     {
         var next = await JS.InvokeAsync<string>("theme.toggle");
         _isDark = next == "dark";
+    }
+
+    private async Task Logout()
+    {
+        await JS.InvokeVoidAsync("storage.set", "jwt", "");
+        Nav.NavigateTo("/login");
     }
 }

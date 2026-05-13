@@ -6,6 +6,7 @@
 @using System.Text.RegularExpressions
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject NavigationManager Nav
 
 <PageTitle>Podsumowania Spotkań</PageTitle>
 
@@ -309,12 +310,36 @@
     {
         if (!firstRender) return;
 
+        var token = await JS.InvokeAsync<string?>("storage.get", "jwt");
+        if (string.IsNullOrEmpty(token) || IsTokenExpired(token))
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+        Http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
         var stored = await JS.InvokeAsync<string?>("storage.get", "selectedDate");
         var date = DateOnly.TryParse(stored, out var d) ? d : DateOnly.FromDateTime(DateTime.Today);
 
         _selectedDate = date;
         await LoadSummaries();
+        await RefreshCalendar();
         StateHasChanged();
+    }
+
+    private static bool IsTokenExpired(string token)
+    {
+        try
+        {
+            var payload = token.Split('.')[1];
+            var padded = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var exp = doc.RootElement.GetProperty("exp").GetInt64();
+            return DateTimeOffset.UtcNow.ToUnixTimeSeconds() >= exp;
+        }
+        catch { return true; }
     }
 
     private async Task OnDateSelected(DateOnly date)

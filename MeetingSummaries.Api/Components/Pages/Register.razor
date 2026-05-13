@@ -1,0 +1,125 @@
+@page "/register"
+@layout AuthLayout
+@rendermode InteractiveServer
+@using MeetingSummaries.Api.Components.Layout
+@using System.Net
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Rejestracja</PageTitle>
+
+<div class="login-wrap">
+    <div class="card login-card shadow">
+        <div class="card-body p-4">
+            <h4 class="mb-4 text-center fw-semibold">Nowe konto</h4>
+
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger py-2">@_error</div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label">Login</label>
+                <input class="form-control" @bind="_username" @bind:event="oninput"
+                       @onkeydown="OnKeyDown" autocomplete="username" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Hasło</label>
+                <input type="password" class="form-control" @bind="_password" @bind:event="oninput"
+                       @onkeydown="OnKeyDown" autocomplete="new-password" />
+            </div>
+            <div class="mb-4">
+                <label class="form-label">Powtórz hasło</label>
+                <input type="password" class="form-control" @bind="_password2" @bind:event="oninput"
+                       @onkeydown="OnKeyDown" autocomplete="new-password" />
+            </div>
+            <button class="btn btn-success w-100 mb-3" @onclick="DoRegister" disabled="@_loading">
+                @if (_loading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                }
+                Zarejestruj się
+            </button>
+            <div class="text-center">
+                <a href="/login" class="text-secondary small">Masz już konto? Zaloguj się</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .login-wrap {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 80vh;
+    }
+
+    .login-card {
+        width: 100%;
+        max-width: 380px;
+    }
+</style>
+
+@code {
+    private string _username = string.Empty;
+    private string _password = string.Empty;
+    private string _password2 = string.Empty;
+    private string? _error;
+    private bool _loading;
+
+    private record LoginResponse(string Token, DateTime ExpiresAt);
+
+    private async Task DoRegister()
+    {
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(_username))
+        {
+            _error = "Login jest wymagany.";
+            return;
+        }
+        if (_password.Length < 4)
+        {
+            _error = "Hasło musi mieć co najmniej 4 znaki.";
+            return;
+        }
+        if (_password != _password2)
+        {
+            _error = "Hasła nie są identyczne.";
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/auth/register",
+                new { Username = _username.Trim(), Password = _password });
+
+            if (response.StatusCode == HttpStatusCode.Conflict)
+            {
+                _error = "Użytkownik o tej nazwie już istnieje.";
+                return;
+            }
+            response.EnsureSuccessStatusCode();
+
+            var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            await JS.InvokeVoidAsync("storage.set", "jwt", result!.Token);
+            Nav.NavigateTo("/meetings");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await DoRegister();
+    }
+}
